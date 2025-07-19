@@ -1,15 +1,14 @@
 // 代理服务器配置
 export const PROXY_CONFIG = {
-  // 默认使用原始维基百科API（如果用户在海外）
   useProxy: true,
   
-  // 代理服务器地址（部署后需要更新）
-  proxyBaseUrl: 'https://proxy.littlejoy.live',
+  // 代理服务器地址（通过环境变量配置）
+  proxyBaseUrl: import.meta.env.VITE_PROXY_BASE_URL,
   
   // 可以通过环境变量覆盖
   getProxyUrl: () => {
     if (typeof window !== 'undefined' && window.location.hostname === 'localhost') {
-      return 'https://proxy.littlejoy.live';
+      return import.meta.env.VITE_LOCAL_BASE_URL;
     }
     return PROXY_CONFIG.proxyBaseUrl;
   },
