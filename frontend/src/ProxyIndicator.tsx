@@ -7,14 +7,10 @@ interface ProxyIndicatorProps {
 
 export const ProxyIndicator: React.FC<ProxyIndicatorProps> = ({ className = "" }) => {
   const [isUsingProxy, setIsUsingProxy] = useState(false);
-  const [proxyUrl, setProxyUrl] = useState('');
 
   useEffect(() => {
     const usingProxy = PROXY_CONFIG.shouldUseProxy();
     setIsUsingProxy(usingProxy);
-    if (usingProxy) {
-      setProxyUrl(PROXY_CONFIG.getProxyUrl());
-    }
   }, []);
 
   const toggleProxy = () => {
