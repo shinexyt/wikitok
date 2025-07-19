@@ -5,11 +5,12 @@ import { Analytics } from "@vercel/analytics/react";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { useLikedArticles } from "./contexts/LikedArticlesContext";
 import { useWikiArticles } from "./hooks/useWikiArticles";
+import { ProxyIndicator } from "./ProxyIndicator";
 
 function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLikes, setShowLikes] = useState(false);
-  const { articles, loading, fetchArticles } = useWikiArticles();
+  const { articles, loading, fetchArticles, getMoreArticles } = useWikiArticles();
   const { likedArticles, toggleLike } = useLikedArticles();
   const observerTarget = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -18,10 +19,10 @@ function App() {
     (entries: IntersectionObserverEntry[]) => {
       const [target] = entries;
       if (target.isIntersecting && !loading) {
-        fetchArticles();
+        getMoreArticles();
       }
     },
-    [loading, fetchArticles]
+    [loading, getMoreArticles]
   );
 
   useEffect(() => {
@@ -93,6 +94,7 @@ function App() {
           Likes
         </button>
         <LanguageSelector />
+        <ProxyIndicator />
       </div>
 
       {showAbout && (
@@ -106,10 +108,10 @@ function App() {
             </button>
             <h2 className="text-xl font-bold mb-4">About WikiTok</h2>
             <p className="mb-4">
-              A TikTok-style interface for exploring random Wikipedia articles.
+              A TikTok-style interface for exploring random Wikipedia articles with proxy support for better accessibility.
             </p>
-            <p className="text-white/70">
-              Made with ❤️ by{" "}
+            <p className="text-white/70 mb-2">
+              Originally created with ❤️ by{" "}
               <a
                 href="https://x.com/Aizkmusic"
                 target="_blank"
@@ -119,28 +121,27 @@ function App() {
                 @Aizkmusic
               </a>
             </p>
-            <p className="text-white/70 mt-2">
-              Check out the code on{" "}
+            <p className="text-white/70 mb-2">
+              Enhanced with proxy features by{" "}
               <a
-                href="https://github.com/IsaacGemal/wikitok"
+                href="https://github.com/shinexyt"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-white hover:underline"
+              >
+                @shinexyt
+              </a>
+            </p>
+            <p className="text-white/70 mt-2">
+              Check out the enhanced version on{" "}
+              <a
+                href="https://github.com/shinexyt/wikitok"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-white hover:underline"
               >
                 GitHub
               </a>
-            </p>
-            <p className="text-white/70 mt-2">
-              If you enjoy this project, you can{" "}
-              <a
-                href="https://buymeacoffee.com/aizk"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-white hover:underline"
-              >
-                buy me a coffee
-              </a>
-              ! ☕
             </p>
           </div>
           <div
@@ -193,9 +194,9 @@ function App() {
                 </p>
               ) : (
                 <div className="space-y-4">
-                  {filteredLikedArticles.map((article) => (
+                  {filteredLikedArticles.map((article, index) => (
                     <div
-                      key={`${article.pageid}-${Date.now()}`}
+                      key={`liked-${article.pageid}-${index}`}
                       className="flex gap-4 items-start group"
                     >
                       {article.thumbnail && (
@@ -241,8 +242,8 @@ function App() {
         </div>
       )}
 
-      {articles.map((article) => (
-        <WikiCard key={article.pageid} article={article} />
+      {articles.map((article, index) => (
+        <WikiCard key={`${article.pageid}-${index}`} article={article} />
       ))}
       <div ref={observerTarget} className="h-10 -mt-1" />
       {loading && (

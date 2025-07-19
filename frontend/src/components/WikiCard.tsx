@@ -1,6 +1,7 @@
 import { Share2, Heart } from 'lucide-react';
 import { useState } from 'react';
 import { useLikedArticles } from '../contexts/LikedArticlesContext';
+import { ArticleModal } from './ArticleModal';
 
 export interface WikiArticle {
     title: string;
@@ -8,7 +9,7 @@ export interface WikiArticle {
     extract: string;
     pageid: number;
     url: string;
-    thumbnail: {
+    thumbnail?: {
         source: string;
         width: number;
         height: number;
@@ -21,6 +22,7 @@ interface WikiCardProps {
 
 export function WikiCard({ article }: WikiCardProps) {
     const [imageLoaded, setImageLoaded] = useState(false);
+    const [showModal, setShowModal] = useState(false);
     const { toggleLike, isLiked } = useLikedArticles();
 
     // Add debugging log
@@ -107,16 +109,21 @@ export function WikiCard({ article }: WikiCardProps) {
                         </div>
                     </div>
                     <p className="text-gray-100 mb-4 drop-shadow-lg line-clamp-6">{article.extract}</p>
-                    <a
-                        href={article.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-block text-white hover:text-gray-200 drop-shadow-lg"
+                    <button
+                        onClick={() => setShowModal(true)}
+                        className="inline-block text-white hover:text-gray-200 drop-shadow-lg underline"
                     >
                         Read more →
-                    </a>
+                    </button>
                 </div>
             </div>
+            
+            {/* Article Modal */}
+            <ArticleModal 
+                article={article}
+                isOpen={showModal}
+                onClose={() => setShowModal(false)}
+            />
         </div>
     );
 }

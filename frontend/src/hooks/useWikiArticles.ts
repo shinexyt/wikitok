@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useLocalization } from "./useLocalization";
 import type { WikiArticle } from "../components/WikiCard";
+import { getProxiedImageUrl, getProxiedPageUrl } from "../config";
 
 const preloadImage = (src: string): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -17,12 +18,15 @@ export function useWikiArticles() {
   const [buffer, setBuffer] = useState<WikiArticle[]>([]);
   const { currentLanguage } = useLocalization();
 
-  const fetchArticles = async (forBuffer = false) => {
+  const fetchArticles = useCallback(async (forBuffer = false) => {
     if (loading) return;
     setLoading(true);
     try {
+      // 使用动态API URL获取方法
+      const apiUrl = currentLanguage.getApiUrl();
+      
       const response = await fetch(
-        currentLanguage.api +
+        apiUrl +
           new URLSearchParams({
             action: "query",
             format: "json",
@@ -42,16 +46,33 @@ export function useWikiArticles() {
           })
       );
 
+      if (!response.ok) {
+        throw new Error(`获取文章失败: ${response.status} ${response.statusText}`);
+      }
+
       const data = await response.json();
+      
+      // 检查API响应是否包含错误
+      if (data.error) {
+        throw new Error(`维基百科API错误: ${data.error.info || data.error.code}`);
+      }
+
+      if (!data.query || !data.query.pages) {
+        throw new Error('维基百科API返回数据格式异常');
+      }
+
       const newArticles = Object.values(data.query.pages)
         .map(
           (page: any): WikiArticle => ({
             title: page.title,
-            displaytitle: page.varianttitles[currentLanguage.id],
+            displaytitle: page.varianttitles ? page.varianttitles[currentLanguage.id] : page.title,
             extract: page.extract,
             pageid: page.pageid,
-            thumbnail: page.thumbnail,
-            url: page.canonicalurl,
+            thumbnail: page.thumbnail ? {
+              ...page.thumbnail,
+              source: getProxiedImageUrl(page.thumbnail.source)
+            } : undefined,
+            url: getProxiedPageUrl(page.canonicalurl),
           })
         )
         .filter(
@@ -62,6 +83,7 @@ export function useWikiArticles() {
             article.extract
         );
 
+      // 预加载图片
       await Promise.allSettled(
         newArticles
           .filter((article) => article.thumbnail)
@@ -71,24 +93,48 @@ export function useWikiArticles() {
       if (forBuffer) {
         setBuffer(newArticles);
       } else {
-        setArticles((prev) => [...prev, ...newArticles]);
+        setArticles((prev) => {
+          // 避免重复文章
+          const existingIds = new Set(prev.map(article => article.pageid));
+          const uniqueNewArticles = newArticles.filter(article => !existingIds.has(article.pageid));
+          return [...prev, ...uniqueNewArticles];
+        });
         fetchArticles(true);
       }
     } catch (error) {
-      console.error("Error fetching articles:", error);
+      console.error("获取文章时出错:", error);
+      
+      // 如果是网络错误或CORS错误，可能需要启用代理
+      if (error instanceof TypeError && error.message.includes('fetch')) {
+        console.warn('可能需要启用代理服务器以访问维基百科API');
+        console.warn('请在URL中添加 ?useProxy=true 参数来测试代理功能');
+      }
+      
+      // 可以在这里添加用户友好的错误提示
+      // 例如：显示一个toast或者错误状态
     }
     setLoading(false);
-  };
+  }, [currentLanguage, loading]);
 
   const getMoreArticles = useCallback(() => {
     if (buffer.length > 0) {
-      setArticles((prev) => [...prev, ...buffer]);
+      setArticles((prev) => {
+        // 避免重复文章
+        const existingIds = new Set(prev.map(article => article.pageid));
+        const uniqueBufferArticles = buffer.filter(article => !existingIds.has(article.pageid));
+        return [...prev, ...uniqueBufferArticles];
+      });
       setBuffer([]);
       fetchArticles(true);
     } else {
       fetchArticles(false);
     }
-  }, [buffer]);
+  }, [buffer, fetchArticles]);
 
-  return { articles, loading, fetchArticles: getMoreArticles };
+  return { 
+    articles, 
+    loading, 
+    fetchArticles, 
+    getMoreArticles 
+  };
 }
