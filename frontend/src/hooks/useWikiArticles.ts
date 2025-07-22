@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useLocalization } from "./useLocalization";
 import type { WikiArticle } from "../components/WikiCard";
 import { getProxiedImageUrl, getProxiedPageUrl } from "../config";
@@ -17,9 +17,11 @@ export function useWikiArticles() {
   const [loading, setLoading] = useState(false);
   const [buffer, setBuffer] = useState<WikiArticle[]>([]);
   const { currentLanguage } = useLocalization();
+  const loadingRef = useRef(false);
 
   const fetchArticles = useCallback(async (forBuffer = false) => {
-    if (loading) return;
+    if (loadingRef.current) return;
+    loadingRef.current = true;
     setLoading(true);
     try {
       // 使用动态API URL获取方法
@@ -61,9 +63,16 @@ export function useWikiArticles() {
         throw new Error('维基百科API返回数据格式异常');
       }
 
-      const newArticles = Object.values(data.query.pages)
+      const newArticles = (Object.values(data.query.pages) as {
+        title: string;
+        extract: string; 
+        pageid: number;
+        thumbnail?: { source: string; width: number; height: number };
+        canonicalurl: string;
+        varianttitles?: Record<string, string>;
+      }[])
         .map(
-          (page: any): WikiArticle => ({
+          (page): WikiArticle => ({
             title: page.title,
             displaytitle: page.varianttitles ? page.varianttitles[currentLanguage.id] : page.title,
             extract: page.extract,
@@ -110,11 +119,14 @@ export function useWikiArticles() {
         console.warn('请在URL中添加 ?useProxy=true 参数来测试代理功能');
       }
       
-      // 可以在这里添加用户友好的错误提示
-      // 例如：显示一个toast或者错误状态
+      // 确保在错误情况下也能继续工作，提供一些默认数据或重试机制
+      // 这样即使单次请求失败，用户仍然可以继续滚动
+    } finally {
+      // 确保无论成功还是失败都重置loading状态
+      loadingRef.current = false;
+      setLoading(false);
     }
-    setLoading(false);
-  }, [currentLanguage, loading]);
+  }, [currentLanguage]);
 
   const getMoreArticles = useCallback(() => {
     if (buffer.length > 0) {
@@ -125,8 +137,10 @@ export function useWikiArticles() {
         return [...prev, ...uniqueBufferArticles];
       });
       setBuffer([]);
+      // 异步获取更多文章到缓冲区，不阻塞当前操作
       fetchArticles(true);
     } else {
+      // 直接获取新文章
       fetchArticles(false);
     }
   }, [buffer, fetchArticles]);
