@@ -52,6 +52,7 @@ export function useWikiArticles() {
   const [articles, setArticles] = useState<WikiArticle[]>([]);
   const [loading, setLoading] = useState(false);
   const [buffer, setBuffer] = useState<WikiArticle[]>([]);
+  const [error, setError] = useState<string | null>(null);
   const { currentLanguage } = useLocalization();
   const loadingRef = useRef(false);
   const storedArticleIds = useRef(getStoredArticleIds(currentLanguage.id));
@@ -61,7 +62,7 @@ export function useWikiArticles() {
     loadingRef.current = true;
     setLoading(true);
     
-    const MAX_RETRIES = 3;
+    const MAX_RETRIES = 2; // 减少重试次数，避免无限循环
     const MIN_UNIQUE_ARTICLES = 10; // 每次至少要获取10篇新文章
     
     try {
@@ -94,6 +95,11 @@ export function useWikiArticles() {
 
       if (!response.ok) {
         throw new Error(`获取文章失败: ${response.status} ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        throw new Error('CORS_ERROR: 维基百科API返回了HTML而不是JSON，可能是CORS限制');
       }
 
       const data = await response.json();
@@ -151,7 +157,7 @@ export function useWikiArticles() {
         // 短暂延迟后重试，避免过于频繁的请求
         setTimeout(() => {
           fetchArticles(forBuffer, retryCount + 1);
-        }, 500);
+        }, 1000);
         return;
       }
 
@@ -178,29 +184,56 @@ export function useWikiArticles() {
         });
         // 异步为缓冲区获取更多文章
         if (newArticles.length > 0) {
-          setTimeout(() => fetchArticles(true), 1000);
+          setTimeout(() => fetchArticles(true), 2000);
         }
       }
       
       console.log(`成功获取 ${newArticles.length} 篇新文章`);
+      
+      // 成功后重置错误计数
+      if (retryCount > 0) {
+        console.log('请求恢复正常');
+      }
+      
+      // 清除错误状态
+      setError(null);
+      
     } catch (error) {
       console.error("获取文章时出错:", error);
       
-      // 如果是网络错误或CORS错误，可能需要启用代理
-      if (error instanceof TypeError && error.message.includes('fetch')) {
-        console.warn('可能需要启用代理服务器以访问维基百科API');
-        console.warn('请在URL中添加 ?useProxy=true 参数来测试代理功能');
-      }
-      
-      // 如果重试次数未达上限，等待后重试
-      if (retryCount < MAX_RETRIES) {
-        console.log(`请求失败，${2000 * (retryCount + 1)}ms 后进行第 ${retryCount + 1} 次重试...`);
-        setTimeout(() => {
-          loadingRef.current = false;
-          setLoading(false);
-          fetchArticles(forBuffer, retryCount + 1);
-        }, 2000 * (retryCount + 1));
-        return;
+      // 如果是CORS错误，提供更明确的指导
+      if (error instanceof Error && (
+        error.message.includes('CORS') || 
+        error.message.includes('<!doctype') ||
+        error.message.includes('Unexpected token')
+      )) {
+        const corsError = '🚫 无法连接到维基百科API，可能是网络限制导致的。\n\n💡 解决方案：\n• 刷新页面重试\n• 使用代理: 在URL添加 ?useProxy=true\n• 检查网络连接';
+        setError(corsError);
+        
+        console.warn('🚫 检测到CORS错误 - 无法直接访问维基百科API');
+        console.warn('💡 解决方案：');
+        console.warn('1. 使用代理服务器: 在URL添加 ?useProxy=true');
+        console.warn('2. 配置本地代理服务器: 参见 README.md');
+        console.warn('3. 部署到支持代理的环境');
+        
+        // 在CORS错误时不要无限重试
+        if (retryCount === 0) {
+          console.warn('⚠️ 由于CORS限制，将停止尝试获取新文章');
+          console.warn('🔧 请参考项目README配置代理服务器');
+        }
+      } else {
+        // 其他类型的错误可以重试
+        if (retryCount < MAX_RETRIES) {
+          console.log(`网络错误，${3000 * (retryCount + 1)}ms 后进行第 ${retryCount + 1} 次重试...`);
+          setTimeout(() => {
+            loadingRef.current = false;
+            setLoading(false);
+            fetchArticles(forBuffer, retryCount + 1);
+          }, 3000 * (retryCount + 1));
+          return;
+        } else {
+          setError('网络连接失败，请检查网络设置后重试。');
+        }
       }
     } finally {
       // 确保无论成功还是失败都重置loading状态
@@ -240,6 +273,7 @@ export function useWikiArticles() {
   return { 
     articles, 
     loading, 
+    error,
     fetchArticles, 
     getMoreArticles,
     clearCache
