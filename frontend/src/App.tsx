@@ -10,7 +10,7 @@ import { ProxyIndicator } from "./ProxyIndicator";
 function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLikes, setShowLikes] = useState(false);
-  const { articles, loading, fetchArticles, getMoreArticles } = useWikiArticles();
+  const { articles, loading, fetchArticles, getMoreArticles, clearCache } = useWikiArticles();
   const { likedArticles, toggleLike } = useLikedArticles();
   const observerTarget = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,7 +40,13 @@ function App() {
 
   useEffect(() => {
     fetchArticles();
-  }, []);
+    
+    // 在开发环境中暴露清除缓存的功能到全局 console
+    if (import.meta.env.DEV) {
+      (window as any).clearWikiTokCache = clearCache;
+      console.log('开发模式：使用 clearWikiTokCache() 来清除已获取文章的缓存');
+    }
+  }, [fetchArticles, clearCache]);
 
   const filteredLikedArticles = likedArticles.filter(
     (article) =>

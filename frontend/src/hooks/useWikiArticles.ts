@@ -3,6 +3,42 @@ import { useLocalization } from "./useLocalization";
 import type { WikiArticle } from "../components/WikiCard";
 import { getProxiedImageUrl, getProxiedPageUrl } from "../config";
 
+// 用于持久化已获取的文章ID，避免重复
+const FETCHED_ARTICLES_KEY = 'wikitok_fetched_articles';
+const MAX_STORED_ARTICLES = 1000; // 最多存储1000个已获取的文章ID
+
+// 获取已存储的文章ID集合（按语言分别存储）
+function getStoredArticleIds(languageId: string): Set<number> {
+  try {
+    const key = `${FETCHED_ARTICLES_KEY}_${languageId}`;
+    const stored = localStorage.getItem(key);
+    if (stored) {
+      const ids = JSON.parse(stored);
+      return new Set(Array.isArray(ids) ? ids : []);
+    }
+  } catch (error) {
+    console.warn('无法从localStorage读取已获取的文章ID:', error);
+  }
+  return new Set();
+}
+
+// 存储已获取的文章ID（按语言分别存储）
+function storeArticleIds(ids: Set<number>, languageId: string) {
+  try {
+    const key = `${FETCHED_ARTICLES_KEY}_${languageId}`;
+    const idsArray = Array.from(ids);
+    // 如果超过最大存储数量，保留最新的一半
+    if (idsArray.length > MAX_STORED_ARTICLES) {
+      const trimmedIds = idsArray.slice(-Math.floor(MAX_STORED_ARTICLES / 2));
+      localStorage.setItem(key, JSON.stringify(trimmedIds));
+    } else {
+      localStorage.setItem(key, JSON.stringify(idsArray));
+    }
+  } catch (error) {
+    console.warn('无法将文章ID存储到localStorage:', error);
+  }
+}
+
 const preloadImage = (src: string): Promise<void> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -18,14 +54,22 @@ export function useWikiArticles() {
   const [buffer, setBuffer] = useState<WikiArticle[]>([]);
   const { currentLanguage } = useLocalization();
   const loadingRef = useRef(false);
+  const storedArticleIds = useRef(getStoredArticleIds(currentLanguage.id));
 
-  const fetchArticles = useCallback(async (forBuffer = false) => {
+  const fetchArticles = useCallback(async (forBuffer = false, retryCount = 0) => {
     if (loadingRef.current) return;
     loadingRef.current = true;
     setLoading(true);
+    
+    const MAX_RETRIES = 3;
+    const MIN_UNIQUE_ARTICLES = 10; // 每次至少要获取10篇新文章
+    
     try {
       // 使用动态API URL获取方法
       const apiUrl = currentLanguage.getApiUrl();
+      
+      // 增加获取数量以提高获得唯一文章的概率
+      const fetchLimit = Math.max(30, MIN_UNIQUE_ARTICLES * 2);
       
       const response = await fetch(
         apiUrl +
@@ -36,7 +80,7 @@ export function useWikiArticles() {
             grnnamespace: "0",
             prop: "extracts|info|pageimages",
             inprop: "url|varianttitles",
-            grnlimit: "20",
+            grnlimit: fetchLimit.toString(),
             exintro: "1",
             exlimit: "max",
             exsentences: "5",
@@ -62,6 +106,12 @@ export function useWikiArticles() {
       if (!data.query || !data.query.pages) {
         throw new Error('维基百科API返回数据格式异常');
       }
+
+      const allFetchedIds = new Set([
+        ...storedArticleIds.current,
+        ...articles.map(article => article.pageid),
+        ...buffer.map(article => article.pageid)
+      ]);
 
       const newArticles = (Object.values(data.query.pages) as {
         title: string;
@@ -89,8 +139,21 @@ export function useWikiArticles() {
             article.thumbnail &&
             article.thumbnail.source &&
             article.url &&
-            article.extract
+            article.extract &&
+            !allFetchedIds.has(article.pageid) // 过滤掉已获取的文章
         );
+
+      // 如果获取的唯一文章太少且还有重试次数，则重试
+      if (newArticles.length < MIN_UNIQUE_ARTICLES && retryCount < MAX_RETRIES) {
+        console.log(`获取的唯一文章数量过少 (${newArticles.length}/${MIN_UNIQUE_ARTICLES})，进行第 ${retryCount + 1} 次重试...`);
+        loadingRef.current = false;
+        setLoading(false);
+        // 短暂延迟后重试，避免过于频繁的请求
+        setTimeout(() => {
+          fetchArticles(forBuffer, retryCount + 1);
+        }, 500);
+        return;
+      }
 
       // 预加载图片
       await Promise.allSettled(
@@ -99,17 +162,27 @@ export function useWikiArticles() {
           .map((article) => preloadImage(article.thumbnail!.source))
       );
 
+      // 更新已获取文章ID的持久化存储
+      const newIds = new Set(newArticles.map(article => article.pageid));
+      newIds.forEach(id => storedArticleIds.current.add(id));
+      storeArticleIds(storedArticleIds.current, currentLanguage.id);
+
       if (forBuffer) {
         setBuffer(newArticles);
       } else {
         setArticles((prev) => {
-          // 避免重复文章
+          // 再次确保不添加重复文章（双重保险）
           const existingIds = new Set(prev.map(article => article.pageid));
           const uniqueNewArticles = newArticles.filter(article => !existingIds.has(article.pageid));
           return [...prev, ...uniqueNewArticles];
         });
-        fetchArticles(true);
+        // 异步为缓冲区获取更多文章
+        if (newArticles.length > 0) {
+          setTimeout(() => fetchArticles(true), 1000);
+        }
       }
+      
+      console.log(`成功获取 ${newArticles.length} 篇新文章`);
     } catch (error) {
       console.error("获取文章时出错:", error);
       
@@ -119,36 +192,56 @@ export function useWikiArticles() {
         console.warn('请在URL中添加 ?useProxy=true 参数来测试代理功能');
       }
       
-      // 确保在错误情况下也能继续工作，提供一些默认数据或重试机制
-      // 这样即使单次请求失败，用户仍然可以继续滚动
+      // 如果重试次数未达上限，等待后重试
+      if (retryCount < MAX_RETRIES) {
+        console.log(`请求失败，${2000 * (retryCount + 1)}ms 后进行第 ${retryCount + 1} 次重试...`);
+        setTimeout(() => {
+          loadingRef.current = false;
+          setLoading(false);
+          fetchArticles(forBuffer, retryCount + 1);
+        }, 2000 * (retryCount + 1));
+        return;
+      }
     } finally {
       // 确保无论成功还是失败都重置loading状态
       loadingRef.current = false;
       setLoading(false);
     }
-  }, [currentLanguage]);
+  }, [currentLanguage, articles, buffer]);
 
   const getMoreArticles = useCallback(() => {
     if (buffer.length > 0) {
       setArticles((prev) => {
-        // 避免重复文章
-        const existingIds = new Set(prev.map(article => article.pageid));
-        const uniqueBufferArticles = buffer.filter(article => !existingIds.has(article.pageid));
+        // 避免重复文章，检查所有已知的文章ID
+        const allExistingIds = new Set([
+          ...prev.map(article => article.pageid),
+          ...Array.from(storedArticleIds.current)
+        ]);
+        const uniqueBufferArticles = buffer.filter(article => !allExistingIds.has(article.pageid));
         return [...prev, ...uniqueBufferArticles];
       });
       setBuffer([]);
       // 异步获取更多文章到缓冲区，不阻塞当前操作
-      fetchArticles(true);
+      setTimeout(() => fetchArticles(true), 500);
     } else {
       // 直接获取新文章
       fetchArticles(false);
     }
   }, [buffer, fetchArticles]);
 
+  // 清空缓存的功能，用于语言切换时重新开始
+  const clearCache = useCallback(() => {
+    storedArticleIds.current.clear();
+    storeArticleIds(storedArticleIds.current, currentLanguage.id);
+    setArticles([]);
+    setBuffer([]);
+  }, [currentLanguage.id]);
+
   return { 
     articles, 
     loading, 
     fetchArticles, 
-    getMoreArticles 
+    getMoreArticles,
+    clearCache
   };
 }
