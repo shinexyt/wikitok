@@ -1,6 +1,6 @@
 // 代理服务器配置
 export const PROXY_CONFIG = {
-  useProxy: true,
+  useProxy: false, // 在开发环境中默认关闭代理
   
   // 代理服务器地址（通过环境变量配置）
   proxyBaseUrl: import.meta.env.VITE_PROXY_BASE_URL,
@@ -27,6 +27,12 @@ export const PROXY_CONFIG = {
         return false;
       }
     }
+    
+    // 如果没有配置代理服务器，则不使用代理
+    if (!PROXY_CONFIG.proxyBaseUrl && !import.meta.env.VITE_LOCAL_BASE_URL) {
+      return false;
+    }
+    
     return PROXY_CONFIG.useProxy;
   }
 };

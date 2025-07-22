@@ -10,7 +10,7 @@ import { ProxyIndicator } from "./ProxyIndicator";
 function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLikes, setShowLikes] = useState(false);
-  const { articles, loading, fetchArticles, getMoreArticles } = useWikiArticles();
+  const { articles, loading, error, fetchArticles, getMoreArticles, clearCache } = useWikiArticles();
   const { likedArticles, toggleLike } = useLikedArticles();
   const observerTarget = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -40,7 +40,13 @@ function App() {
 
   useEffect(() => {
     fetchArticles();
-  }, []);
+    
+    // 在开发环境中暴露清除缓存的功能到全局 console
+    if (import.meta.env.DEV) {
+      (window as any).clearWikiTokCache = clearCache;
+      console.log('开发模式：使用 clearWikiTokCache() 来清除已获取文章的缓存');
+    }
+  }, [fetchArticles, clearCache]);
 
   const filteredLikedArticles = likedArticles.filter(
     (article) =>
@@ -246,6 +252,26 @@ function App() {
         <WikiCard key={`${article.pageid}-${index}`} article={article} />
       ))}
       <div ref={observerTarget} className="h-10 -mt-1" />
+      
+      {/* 错误提示 */}
+      {error && !loading && articles.length === 0 && (
+        <div className="h-screen w-full flex items-center justify-center p-8">
+          <div className="bg-gray-800 rounded-lg p-6 max-w-md text-center">
+            <h3 className="text-lg font-bold mb-4 text-red-400">连接问题</h3>
+            <pre className="text-sm text-white/80 whitespace-pre-line mb-4 text-left">
+              {error}
+            </pre>
+            <button
+              onClick={() => window.location.reload()}
+              className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg transition-colors"
+            >
+              重新加载
+            </button>
+          </div>
+        </div>
+      )}
+      
+      {/* 加载指示器 */}
       {loading && (
         <div className="h-screen w-full flex items-center justify-center gap-2">
           <Loader2 className="h-6 w-6 animate-spin" />
