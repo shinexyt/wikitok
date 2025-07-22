@@ -57,14 +57,24 @@ export function getProxiedImageUrl(originalUrl: string, useProxy?: boolean): str
   const shouldProxy = useProxy ?? PROXY_CONFIG.shouldUseProxy();
   
   if (shouldProxy && originalUrl.includes('upload.wikimedia.org')) {
-    // 使用第三方图片代理服务或CDN
-    // 常见的解决方案包括：
-    // 1. 使用 images.weserv.nl 代理
-    // 2. 使用 imageproxy.pimg.tw 
-    // 3. 使用其他公共图片代理服务
+    // 使用自定义 wikipedia-proxy-server 进行图片代理
+    // 该服务器已增加了对图片的代理支持
+    const proxyBaseUrl = PROXY_CONFIG.getProxyUrl();
     
-    // 使用 weserv 图片代理（免费且稳定）
-    return `https://images.weserv.nl/?url=${encodeURIComponent(originalUrl)}`;
+    if (proxyBaseUrl) {
+      // 解析原始 Wikimedia URL 来提取项目和路径
+      // URL 格式: https://upload.wikimedia.org/wikipedia/{project}/{path}
+      const urlMatch = originalUrl.match(/https:\/\/upload\.wikimedia\.org\/wikipedia\/([^/]+)\/(.+)/);
+      
+      if (urlMatch) {
+        const [, project, imagePath] = urlMatch;
+        // 使用 wikipedia-proxy-server 的图片代理端点
+        return `${proxyBaseUrl}/api/images/${project}/${imagePath}`;
+      }
+    }
+    
+    // 如果代理服务器不可用或URL格式不匹配，回退到原始URL
+    return originalUrl;
   }
   
   return originalUrl;

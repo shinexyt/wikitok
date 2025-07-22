@@ -11,7 +11,7 @@ A TikTok-style interface for exploring random Wikipedia articles with multi-lang
 - **TikTok-style Interface**: Vertical scrolling through random Wikipedia articles
 - **Multi-language Support**: 14 languages with flag icons
 - **Intelligent Proxy**: Auto-detects network environment and uses proxy when needed
-- **Image Proxy**: Ensures Wikimedia images display properly via `images.weserv.nl`
+- **Image Proxy**: Ensures Wikimedia images display properly via integrated proxy server
 - **Responsive Design**: Works on mobile and desktop
 - **PWA Support**: Can be installed as a standalone app
 
@@ -85,6 +85,5 @@ MIT License - see the [LICENSE](LICENSE) file for details.
 ## Acknowledgments
 
 - **Original Project**: [IsaacGemal/wikitok](https://github.com/IsaacGemal/wikitok)
-- **API Proxy Server**: [shinexyt/wikipedia-proxy-server](https://github.com/shinexyt/wikipedia-proxy-server)
-- **Image Proxy Service**: [images.weserv.nl](https://images.weserv.nl/)
+- **API Proxy Server**: [shinexyt/wikipedia-proxy-server](https://github.com/shinexyt/wikipedia-proxy-server) (supports both API and image proxying)
 - **Wikipedia**: Thanks to Wikipedia for providing an open knowledge platform
