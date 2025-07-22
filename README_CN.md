@@ -11,7 +11,7 @@
 - **TikTok 风格界面**：垂直滚动浏览随机维基百科文章
 - **多语言支持**：支持 14 种语言，带国旗图标
 - **智能代理**：自动检测网络环境，在需要时使用代理
-- **图片代理**：通过 `images.weserv.nl` 确保维基媒体图片正常显示
+- **图片代理**：通过集成代理服务器确保维基媒体图片正常显示
 - **响应式设计**：适配移动端和桌面端
 - **PWA 支持**：可安装为独立应用
 
@@ -84,6 +84,5 @@ MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 ## 致谢
 
 - **原项目**：[IsaacGemal/wikitok](https://github.com/IsaacGemal/wikitok)
-- **API 代理服务器**：[shinexyt/wikipedia-proxy-server](https://github.com/shinexyt/wikipedia-proxy-server)
-- **图片代理服务**：[images.weserv.nl](https://images.weserv.nl/)
+- **API 代理服务器**：[shinexyt/wikipedia-proxy-server](https://github.com/shinexyt/wikipedia-proxy-server) (支持API和图片代理)
 - **维基百科**：感谢维基百科提供的开放知识平台
