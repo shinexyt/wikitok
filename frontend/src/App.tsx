@@ -10,7 +10,7 @@ import { ProxyIndicator } from "./ProxyIndicator";
 function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [showLikes, setShowLikes] = useState(false);
-  const { articles, loading, fetchArticles, getMoreArticles } = useWikiArticles();
+  const { articles, loading, fetchArticles, getMoreArticles, clearAndFetchArticles } = useWikiArticles();
   const { likedArticles, toggleLike } = useLikedArticles();
   const observerTarget = useRef(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -69,6 +69,11 @@ function App() {
     linkElement.click();
   };
 
+  const handleProxyToggle = () => {
+    // Clear and refresh articles when proxy settings change
+    clearAndFetchArticles();
+  };
+
   return (
     <div className="h-screen w-full bg-black text-white overflow-y-scroll snap-y snap-mandatory hide-scroll">
       <div className="fixed top-4 left-4 z-50">
@@ -94,7 +99,7 @@ function App() {
           Likes
         </button>
         <LanguageSelector />
-        <ProxyIndicator />
+        <ProxyIndicator onProxyToggle={handleProxyToggle} />
       </div>
 
       {showAbout && (

@@ -1,7 +1,20 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useLocalization } from "./useLocalization";
 import type { WikiArticle } from "../components/WikiCard";
-import { getProxiedImageUrl, getProxiedPageUrl } from "../config";
+import { getProxiedImageUrl, getProxiedPageUrl, PROXY_CONFIG, buildApiUrl } from "../config";
+
+interface WikiApiPage {
+  title: string;
+  extract: string;
+  pageid: number;
+  canonicalurl: string;
+  thumbnail?: {
+    source: string;
+    width: number;
+    height: number;
+  };
+  varianttitles?: Record<string, string>;
+}
 
 const preloadImage = (src: string): Promise<void> => {
   return new Promise((resolve, reject) => {
@@ -16,14 +29,35 @@ export function useWikiArticles() {
   const [articles, setArticles] = useState<WikiArticle[]>([]);
   const [loading, setLoading] = useState(false);
   const [buffer, setBuffer] = useState<WikiArticle[]>([]);
+  const [useProxy, setUseProxy] = useState(() => PROXY_CONFIG.shouldUseProxy());
   const { currentLanguage } = useLocalization();
+
+  // Watch for proxy state changes from URL
+  useEffect(() => {
+    const checkProxyState = () => {
+      const currentProxyState = PROXY_CONFIG.shouldUseProxy();
+      if (currentProxyState !== useProxy) {
+        setUseProxy(currentProxyState);
+      }
+    };
+
+    // Check on component mount and when URL changes
+    checkProxyState();
+    
+    // Listen for popstate events (browser back/forward)
+    window.addEventListener('popstate', checkProxyState);
+    
+    return () => {
+      window.removeEventListener('popstate', checkProxyState);
+    };
+  }, [useProxy]);
 
   const fetchArticles = useCallback(async (forBuffer = false) => {
     if (loading) return;
     setLoading(true);
     try {
-      // 使用动态API URL获取方法
-      const apiUrl = currentLanguage.getApiUrl();
+      // 使用 buildApiUrl 并显式传递当前代理状态
+      const apiUrl = buildApiUrl(currentLanguage.id, useProxy);
       
       const response = await fetch(
         apiUrl +
@@ -61,18 +95,18 @@ export function useWikiArticles() {
         throw new Error('维基百科API返回数据格式异常');
       }
 
-      const newArticles = Object.values(data.query.pages)
+      const newArticles = (Object.values(data.query.pages) as WikiApiPage[])
         .map(
-          (page: any): WikiArticle => ({
+          (page: WikiApiPage): WikiArticle => ({
             title: page.title,
             displaytitle: page.varianttitles ? page.varianttitles[currentLanguage.id] : page.title,
             extract: page.extract,
             pageid: page.pageid,
             thumbnail: page.thumbnail ? {
               ...page.thumbnail,
-              source: getProxiedImageUrl(page.thumbnail.source)
+              source: getProxiedImageUrl(page.thumbnail.source, useProxy)
             } : undefined,
-            url: getProxiedPageUrl(page.canonicalurl),
+            url: getProxiedPageUrl(page.canonicalurl, useProxy),
           })
         )
         .filter(
@@ -114,7 +148,15 @@ export function useWikiArticles() {
       // 例如：显示一个toast或者错误状态
     }
     setLoading(false);
-  }, [currentLanguage, loading]);
+  }, [currentLanguage, loading, useProxy]); // Add useProxy dependency since we're using it explicitly
+
+  const clearAndFetchArticles = useCallback(() => {
+    // Clear existing articles and buffer
+    setArticles([]);
+    setBuffer([]);
+    // Fetch fresh articles with current proxy settings
+    fetchArticles(false);
+  }, [fetchArticles]);
 
   const getMoreArticles = useCallback(() => {
     if (buffer.length > 0) {
@@ -135,6 +177,7 @@ export function useWikiArticles() {
     articles, 
     loading, 
     fetchArticles, 
-    getMoreArticles 
+    getMoreArticles,
+    clearAndFetchArticles
   };
 }

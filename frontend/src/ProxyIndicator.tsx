@@ -3,9 +3,10 @@ import { PROXY_CONFIG } from './config';
 
 interface ProxyIndicatorProps {
   className?: string;
+  onProxyToggle?: () => void;
 }
 
-export const ProxyIndicator: React.FC<ProxyIndicatorProps> = ({ className = "" }) => {
+export const ProxyIndicator: React.FC<ProxyIndicatorProps> = ({ className = "", onProxyToggle }) => {
   const [isUsingProxy, setIsUsingProxy] = useState(false);
 
   useEffect(() => {
@@ -17,7 +18,17 @@ export const ProxyIndicator: React.FC<ProxyIndicatorProps> = ({ className = "" }
     const newProxyState = !isUsingProxy;
     const url = new URL(window.location.href);
     url.searchParams.set('useProxy', newProxyState.toString());
-    window.location.href = url.toString();
+    
+    // Update URL without page reload
+    window.history.pushState({}, '', url.toString());
+    
+    // Update local state
+    setIsUsingProxy(newProxyState);
+    
+    // Call callback to notify parent component
+    if (onProxyToggle) {
+      onProxyToggle();
+    }
   };
 
   return (
